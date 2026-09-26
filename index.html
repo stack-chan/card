@@ -326,6 +326,7 @@ const CardSvg_1 = require("@/components/card/CardSvg");
 const layout_1 = require("@/lib/layout");
 const model_1 = require("@/lib/model");
 const export_1 = require("@/lib/export");
+const DRAFT_SAVE_DEBOUNCE_MS = 350;
 function App() {
     const [draft, setDraft] = React.useState(model_1.loadDraft);
     const [bleed, setBleed] = React.useState(false);
@@ -357,7 +358,7 @@ function App() {
                 saveFailed.current = true;
             }
         };
-        const timer = setTimeout(save, 350);
+        const timer = setTimeout(save, DRAFT_SAVE_DEBOUNCE_MS);
         window.addEventListener('pagehide', save);
         return () => { clearTimeout(timer); window.removeEventListener('pagehide', save); };
     }, [draft]);
@@ -604,7 +605,12 @@ const PATHS = {
     x: 'M14.234 10.162 22.977 0h-2.072l-7.591 8.824L7.251 0H.258l9.168 13.343L.258 24H2.33l8.016-9.318L16.749 24h6.993zm-2.837 3.299-.929-1.329L3.076 1.56h3.182l5.965 8.532.929 1.329 7.754 11.09h-3.182z',
 };
 function BrandIcon({ kind, x = 0, y = 0, size = 27, color = 'currentColor' }) {
-    return React.createElement("g", { transform: `translate(${x} ${y}) scale(${size / 24})`, fill: color, "aria-hidden": "true" },
+    const transform = `translate(${x} ${y}) scale(${size / 24})`;
+    if (kind === 'email')
+        return React.createElement("g", { transform: transform, fill: "none", stroke: color, strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" },
+            React.createElement("rect", { x: "2.5", y: "4.5", width: "19", height: "15", rx: "2" }),
+            React.createElement("path", { d: "m3.5 6 8.5 6.5L20.5 6" }));
+    return React.createElement("g", { transform: transform, fill: color, "aria-hidden": "true" },
         React.createElement("path", { d: PATHS[kind] }));
 }
 
@@ -832,11 +838,11 @@ const textarea_1 = require("@/components/ui/textarea");
 const label_1 = require("@/components/ui/label");
 const model_1 = require("@/lib/model");
 function FieldsPanel({ fields, onChange, errors }) {
-    const ids = { name: 'name', latinName: 'latin', role: 'role', tagline: 'tagline', github: 'github', x: 'x' };
+    const ids = { name: 'name', latinName: 'latin', role: 'role', tagline: 'tagline', email: 'email', github: 'github', x: 'x' };
     return React.createElement("div", { className: "fields-panel" }, Object.keys(ids).map(key => {
         const id = `field-${ids[key]}`;
         const shared = {
-            id, value: fields[key], maxLength: model_1.FIELD_LIMITS[key], autoComplete: 'off',
+            id, value: fields[key], maxLength: model_1.FIELD_LIMITS[key], autoComplete: key === 'email' ? 'email' : 'off',
             spellCheck: false, 'aria-invalid': !!errors[key], 'aria-describedby': errors[key] ? `${id}-error` : undefined,
             onChange: (e) => onChange(key, e.target.value),
         };
@@ -844,7 +850,7 @@ function FieldsPanel({ fields, onChange, errors }) {
             React.createElement(label_1.Label, { htmlFor: id }, model_1.FIELD_LABELS[key]),
             key === 'role' || key === 'tagline'
                 ? React.createElement(textarea_1.Textarea, { ...shared, rows: key === 'tagline' ? 2 : 1, className: key === 'role' ? 'role-input' : '' })
-                : React.createElement(input_1.Input, { ...shared, "aria-required": key === 'name' ? true : undefined }),
+                : React.createElement(input_1.Input, { ...shared, type: key === 'email' ? 'email' : 'text', "aria-required": key === 'name' ? true : undefined }),
             errors[key] && React.createElement("p", { id: `${id}-error`, className: "field-error", role: "alert" }, errors[key]));
     }));
 }
@@ -1482,6 +1488,10 @@ function fitText(spec, measure) {
 function computeLayout(fields, layout, measure) {
     const center = layout === 'center';
     const x = layout === 'right' ? 359 : 112;
+    const normalized = ['email', 'github', 'x']
+        .map(kind => ({ kind, text: kind === 'email' ? fields.email.trim() : (0, model_ts_1.normalizeAccount)(fields[kind], kind) }))
+        .filter(a => a.text);
+    const compactContacts = center && normalized.length >= 3;
     const align = center ? 'center' : 'left';
     const common = { weight: 400, tracking: .3, align };
     const spec = (id, box, f, min, maxLines = 1, extra = {}) => ({ ...common, ...box, id, text: fields[id], fontSize: f, minFont: min, maxLines, ...extra });
@@ -1497,11 +1507,13 @@ function computeLayout(fields, layout, measure) {
         spec('role', { x, y: 318, width: 436, height: 55 }, 25.5, 16, 2, { tracking: .3 }),
     ];
     const contacts = [];
-    const normalized = ['github', 'x'].map(kind => ({ kind, text: (0, model_ts_1.normalizeAccount)(fields[kind], kind) })).filter(a => a.text);
     normalized.forEach(({ kind, text }, index) => {
-        const box = center ? { x: 294, y: 397 + index * 40, width: 353, height: 32 } : { x: x + 55, y: 401 + index * 44, width: 379, height: 34 };
+        const box = center
+            ? compactContacts ? { x: 294, y: 389 + index * 31, width: 353, height: 28 } : { x: 294, y: 397 + index * 40, width: 353, height: 32 }
+            : { x: x + 55, y: 401 + index * 44, width: 379, height: 34 };
         const accountText = kind === 'x' ? '@' + text : text;
-        const fitted = fitText(spec(kind, box, center ? 24 : 26.5, 16, 1, { text: accountText, align: 'left' }), measure);
+        const email = kind === 'email';
+        const fitted = fitText(spec(kind, box, email ? center ? 19 : 22 : center ? 24 : 26.5, email ? 11 : 16, 1, { text: accountText, align: 'left' }), measure);
         if (center)
             fitted.x = 455 - ((fitted.sizes[0] ?? 0) + 43) / 2 + 43;
         contacts.push({ kind, x: fitted.x - (center ? 43 : 55), y: box.y + (box.height - 27) / 2 - 1 });
@@ -1553,15 +1565,15 @@ exports.DEFAULT_DRAFT = {
         name: 'ししかわ', latinName: 'Shinya Ishikawa',
         role: 'ｽﾀｯｸﾁｬﾝコミュニティ代表',
         tagline: 'Communication Robots\nin Your Hand',
-        github: 'meganetaaan', x: 'meganetaaan',
+        email: '', github: 'meganetaaan', x: 'meganetaaan',
     },
     design: { background: 'scatter', layout: 'left', accent: '#F47721', patternOpacity: 85 },
 };
 exports.FIELD_LIMITS = {
-    name: 60, latinName: 100, role: 140, tagline: 180, github: 80, x: 80,
+    name: 60, latinName: 100, role: 140, tagline: 180, email: 254, github: 80, x: 80,
 };
 exports.FIELD_LABELS = {
-    name: '名前', latinName: '英字表記', role: '肩書き', tagline: 'フレーズ', github: 'GitHub', x: 'X',
+    name: '名前', latinName: '英字表記', role: '肩書き', tagline: 'フレーズ', email: 'メールアドレス', github: 'GitHub', x: 'X',
 };
 /** Strip control characters, not markup: React/SVG serializers handle escaping. */
 function cleanField(value, field) {
