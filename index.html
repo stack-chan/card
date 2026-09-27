@@ -164,7 +164,7 @@ h1,h2,p { margin:0; }
 .section-heading .ui-button { color:#666; margin-right:-8px; }
 .section-heading .tooltip { left:auto; right:0; transform:none; }
 .background-picker { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
-.background-choice { position:relative; display:block; aspect-ratio:91/55; border:1px solid var(--line); border-radius:4px; cursor:pointer; background:white; }
+.background-choice { position:relative; display:block; aspect-ratio:var(--trim-ratio,91/55); border:1px solid var(--line); border-radius:4px; cursor:pointer; background:white; }
 .background-choice:hover { border-color:#999; }
 .background-choice.selected { outline:1px solid var(--ink); border-color:var(--ink); }
 .background-choice:focus-within { outline:2px solid #555; outline-offset:3px; }
@@ -172,8 +172,7 @@ h1,h2,p { margin:0; }
 .background-thumb { width:100%; height:100%; display:block; border-radius:3px; }
 .preview-region { display:flex; align-items:center; justify-content:center; padding:44px; min-width:0; min-height:0; background:var(--canvas); }
 .paper-wrap { width:100%; max-width:min(1000px,calc((100svh - 172px) * var(--paper-ratio))); }
-.preview-card { width:100%; aspect-ratio:91/55; background:white; box-shadow:0 2px 4px #00000009,0 12px 32px #0000000a; }
-.preview-card.with-bleed { aspect-ratio:97/61; }
+.preview-card { width:100%; aspect-ratio:var(--paper-ratio); background:white; box-shadow:0 2px 4px #00000009,0 12px 32px #0000000a; }
 .preview-card>svg { display:block; width:100%; height:100%; overflow:hidden; }
 .paper-caption { display:flex; justify-content:space-between; gap:12px; font-size:11px; line-height:18px; color:#777; padding-top:12px; min-height:30px; font-variant-numeric:tabular-nums; }
 .paper-caption>span:last-child { flex-shrink:0; }
@@ -192,6 +191,10 @@ h1,h2,p { margin:0; }
 .design-panel { display:flex; flex-direction:column; gap:18px; }
 .design-panel legend { font-size:12px; font-weight:500; margin-bottom:8px; }
 .segmented-control { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); padding:3px; gap:3px; border-radius:5px; background:#f0f0f0; }
+.orientation-picker { margin-bottom:24px; }
+.orientation-picker legend { font-size:12px; font-weight:500; margin-bottom:8px; }
+.orientation-picker .segmented-control { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.orientation-picker .segment { gap:6px; }
 .segment { position:relative; display:flex; align-items:center; justify-content:center; height:32px; border-radius:3px; color:#777; cursor:pointer; }
 .segment.selected { color:#242424; background:white; box-shadow:0 1px 3px #00000012; }
 .segment:focus-within { outline:2px solid #555; outline-offset:2px; }
@@ -218,6 +221,7 @@ h1,h2,p { margin:0; }
   .workspace { display:flex; flex-direction:column; height:auto; }
   .preview-region { order:-1; padding:24px 20px 16px; }
   .paper-wrap { max-width:540px; }
+  .app-shell[data-orientation=portrait] .paper-wrap { max-width:min(540px,calc(55svh * var(--paper-ratio))); }
   .paper-caption { padding-top:10px; }
   .editor-sidebar { width:100%; max-width:580px; align-self:center; overflow:visible; border:0; padding:24px 24px 40px; }
   .fields-panel { gap:18px; }
@@ -233,10 +237,9 @@ h1,h2,p { margin:0; }
 }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { transition:none!important; } }
 @media print {
-  @page { size:91mm 55mm; margin:0; }
-  html,body,.app-shell,.workspace { width:91mm; height:55mm; min-height:0; display:block; margin:0; padding:0; background:white; }
+  html,body,.app-shell,.workspace { min-height:0; display:block; margin:0; padding:0; background:white; }
   .app-header,.editor-sidebar,.paper-caption,.toast,.ui-popover { display:none!important; }
-  .preview-region,.paper-wrap,.preview-card { display:block; width:91mm; height:55mm; max-width:none; margin:0; padding:0; box-shadow:none; }
+  .preview-region,.paper-wrap,.preview-card { display:block; max-width:none; margin:0; padding:0; box-shadow:none; }
   .preview-card>svg { width:100%; height:100%; }
   [data-guide] { display:none; }
   * { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
@@ -376,7 +379,8 @@ function App() {
         return () => { clearTimeout(timer); window.removeEventListener('pagehide', save); };
     }, [draft]);
     const measure = React.useMemo(() => (0, layout_1.createBrowserMeasure)(), [fontEpoch]);
-    const layout = React.useMemo(() => (0, layout_1.computeLayout)(draft.fields, draft.design.layout, measure), [draft.fields, draft.design.layout, measure]);
+    const paper = model_1.getPaperGeometry(draft.design.orientation, bleed);
+    const layout = React.useMemo(() => (0, layout_1.computeLayout)(draft.fields, draft.design.layout, measure, draft.design.orientation), [draft.fields, draft.design.layout, draft.design.orientation, measure]);
     const fieldErrors = {};
     layout.texts.filter(t => t.overflow).forEach(t => { fieldErrors[t.id] = '枠に収まりません。'; });
     if (!draft.fields.name.trim())
@@ -402,7 +406,7 @@ function App() {
         setError('');
         setExportOpen(false);
         try {
-            await (0, export_1.exportCard)(svgRef.current, format, bleed, draft.fields.name);
+            await (0, export_1.exportCard)(svgRef.current, format, bleed, draft.fields.name, draft.design.orientation);
         }
         catch (error) {
             setError(error instanceof Error ? error.message : '書き出しに失敗しました。');
@@ -411,9 +415,10 @@ function App() {
             setBusy(null);
         }
     };
-    return React.createElement("div", { className: "app-shell" },
-        React.createElement("style", { media: "print" }, `@page { size:${bleed ? '97mm 61mm' : '91mm 55mm'}; margin:0; }
-      html,body,.app-shell,.workspace,.preview-region,.paper-wrap,.preview-card { width:${bleed ? '97mm' : '91mm'}; height:${bleed ? '61mm' : '55mm'}; }`),
+    return React.createElement("div", { className: "app-shell", 'data-orientation': draft.design.orientation, style: { '--trim-ratio': paper.trimWidth / paper.trimHeight } },
+        React.createElement("style", { media: "print" }, `@page { size:${paper.width}mm ${paper.height}mm; margin:0; }
+      html,body,.app-shell,.workspace,.preview-region,.paper-wrap,.preview-card { width:${paper.width}mm; height:${paper.height}mm; }
+      .app-shell[data-orientation] .paper-wrap { max-width:none; }`),
         React.createElement("header", { className: "app-header" },
             React.createElement("h1", { className: "brand" },
                 "Stack-chan ",
@@ -440,6 +445,7 @@ function App() {
                 invalid && React.createElement("p", { className: "export-error", role: "alert" }, "\u5165\u529B\u5185\u5BB9\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002"))),
         React.createElement("main", { className: "workspace" },
             React.createElement("aside", { className: "editor-sidebar", "aria-label": "\u540D\u523A\u306E\u7DE8\u96C6" },
+                React.createElement(DesignPanel_1.OrientationPicker, { design: draft.design, onChange: changeDesign }),
                 React.createElement(avatar_1.AvatarEditor, { key: avatarRevision, avatar: avatar, onChange: changeAvatar, onError: setError }),
                 React.createElement(FieldsPanel_1.FieldsPanel, { fields: draft.fields, onChange: changeField, errors: fieldErrors }),
                 React.createElement("section", { className: "background-section", "aria-labelledby": "background-label" },
@@ -459,12 +465,12 @@ function App() {
                                 "\u521D\u671F\u5024\u306B\u623B\u3059"))),
                     React.createElement(DesignPanel_1.BackgroundPicker, { design: draft.design, onChange: changeDesign }))),
             React.createElement("section", { className: "preview-region", "aria-label": "\u540D\u523A\u30D7\u30EC\u30D3\u30E5\u30FC" },
-                React.createElement("div", { className: "paper-wrap", style: { '--paper-ratio': bleed ? 97 / 61 : 91 / 55 } },
+                React.createElement("div", { className: "paper-wrap", style: { '--paper-ratio': paper.width / paper.height } },
                     React.createElement("div", { className: `preview-card ${bleed ? 'with-bleed' : ''}`, "data-testid": "preview-card" },
                         React.createElement(CardSvg_1.CardSvg, { ref: svgRef, draft: draft, layout: layout, bleed: bleed, guides: guides, avatar: avatar })),
                     React.createElement("div", { className: "paper-caption" },
                         React.createElement("span", null, small && !invalid ? '文字サイズが小さくなっています。' : ''),
-                        React.createElement("span", null, bleed ? '97 × 61 mm' : '91 × 55 mm'))))),
+                        React.createElement("span", null, `${paper.width} × ${paper.height} mm`))))),
         error && React.createElement("div", { className: "toast", role: "alert" },
             React.createElement("span", null, error),
             React.createElement("button", { onClick: () => setError(''), "aria-label": "\u901A\u77E5\u3092\u9589\u3058\u308B" }, "\u00D7")));
@@ -529,19 +535,32 @@ const MOTIFS = [
     ['heart', 27, 474, 85, 78], ['sleepBottom', 575, 474, 100, 89],
     ['neutral', 788, 450, 88, 75],
 ];
+const PORTRAIT_MOTIFS = [
+    ['happy', 8, 14, 66, 62], ['wink', -18, 210, 72, 64],
+    ['squint', 472, 18, 72, 63], ['neutralTop', 495, 286, 92, 64],
+    ['heart', -24, 452, 77, 70], ['sleep', 497, 568, 78, 64],
+    ['playful', -22, 711, 76, 74], ['sleepBottom', 81, 852, 88, 78],
+    ['neutral', 470, 852, 80, 68],
+];
 function Motifs({ design, sparse = false }) {
-    let motifs = sparse ? MOTIFS.filter((_, i) => [0, 3, 4, 8, 10].includes(i)) : MOTIFS;
-    if (design.layout === 'center')
+    const portrait = design.orientation === 'portrait';
+    const source = portrait ? PORTRAIT_MOTIFS : MOTIFS;
+    let motifs = sparse ? source.filter((_, i) => (portrait ? [0, 2, 4, 6, 8] : [0, 3, 4, 8, 10]).includes(i)) : source;
+    if (!portrait && design.layout === 'center')
         motifs = motifs.filter((_, i) => ![2, 9].includes(i));
-    return React.createElement("g", { opacity: design.patternOpacity / 100 }, motifs.map(([id, x, y, width, height], i) => React.createElement("image", { key: i, href: robotAssets_1.ROBOTS[id], x: design.layout === 'right' ? 910 - x - width : x, y: y, width: width, height: height, preserveAspectRatio: "xMidYMid meet" })));
+    return React.createElement("g", { opacity: design.patternOpacity / 100 }, motifs.map(([id, x, y, width, height], i) => React.createElement("image", { key: i, href: robotAssets_1.ROBOTS[id], x: !portrait && design.layout === 'right' ? 910 - x - width : x, y: y, width: width, height: height, preserveAspectRatio: "xMidYMid meet" })));
 }
 function Background({ design, prefix }) {
     const { background, accent } = design;
+    const portrait = design.orientation === 'portrait';
+    const paper = model_1.getPaperGeometry(design.orientation, true);
+    const full = { x: -30, y: -30, width: paper.width * 10, height: paper.height * 10 };
+    const dotsPath = portrait ? 'M-30-30H580V67Q420 15 275 48T-30 75ZM-30 880Q115 849 275 882T580 870V940H-30Z' : 'M-30-30H940V110Q652 12 575 54T-30 120ZM-30 449Q190 532 450 481T940 458V580H-30Z';
     const soft = (0, model_1.mixWithWhite)(accent, .10);
     const faint = (0, model_1.mixWithWhite)(accent, .045);
-    const isRight = design.layout === 'right';
+    const isRight = !portrait && design.layout === 'right';
     return React.createElement("g", { "data-background": background },
-        React.createElement("rect", { x: "-30", y: "-30", width: "970", height: "610", fill: "#ffffff" }),
+        React.createElement("rect", { ...full, fill: "#ffffff" }),
         React.createElement("defs", null,
             React.createElement("pattern", { id: `${prefix}-grid`, width: "28", height: "28", patternUnits: "userSpaceOnUse" },
                 React.createElement("path", { d: "M28 0H0V28", fill: "none", stroke: accent, strokeWidth: ".6" })),
@@ -551,29 +570,29 @@ function Background({ design, prefix }) {
                 React.createElement("path", { d: "M0 0V16", stroke: accent, strokeWidth: "1.4" }))),
         background === 'scatter' && React.createElement(Motifs, { design: design }),
         background === 'blueprint' && React.createElement(React.Fragment, null,
-            React.createElement("rect", { x: "-30", y: "-30", width: "970", height: "610", fill: faint }),
-            React.createElement("rect", { x: "-30", y: "-30", width: "970", height: "610", fill: `url(#${prefix}-grid)`, opacity: design.patternOpacity / 450 }),
-            React.createElement("path", { d: "M-30 132H90M826 422H940M56-30V98M869 446V580", fill: "none", stroke: accent, strokeWidth: "1.1", opacity: ".28" }),
-            [[55, 131], [869, 421], [854, 92], [48, 482]].map(([x, y], i) => React.createElement("g", { key: i, stroke: accent, opacity: ".38" },
+            React.createElement("rect", { ...full, fill: faint }),
+            React.createElement("rect", { ...full, fill: `url(#${prefix}-grid)`, opacity: design.patternOpacity / 450 }),
+            React.createElement("path", { d: portrait ? 'M-30 132H38M512 782H580M48-30V98M505 816V940' : 'M-30 132H90M826 422H940M56-30V98M869 446V580', fill: "none", stroke: accent, strokeWidth: "1.1", opacity: ".28" }),
+            (portrait ? [[28, 131], [522, 781], [505, 92], [28, 842]] : [[55, 131], [869, 421], [854, 92], [48, 482]]).map(([x, y], i) => React.createElement("g", { key: i, stroke: accent, opacity: ".38" },
                 React.createElement("path", { d: `M${x - 6} ${y}h12m-6-6v12` }))),
             React.createElement(Motifs, { design: design, sparse: true })),
         background === 'dots' && React.createElement(React.Fragment, null,
-            React.createElement("path", { d: "M-30-30H940V110Q652 12 575 54T-30 120ZM-30 449Q190 532 450 481T940 458V580H-30Z", fill: faint }),
-            React.createElement("path", { d: "M-30-30H940V110Q652 12 575 54T-30 120ZM-30 449Q190 532 450 481T940 458V580H-30Z", fill: `url(#${prefix}-dots)`, opacity: design.patternOpacity / 200 }),
+            React.createElement("path", { d: dotsPath, fill: faint }),
+            React.createElement("path", { d: dotsPath, fill: `url(#${prefix}-dots)`, opacity: design.patternOpacity / 200 }),
             React.createElement(Motifs, { design: design, sparse: true })),
         background === 'soft' && React.createElement(React.Fragment, null,
             React.createElement("g", { opacity: design.patternOpacity / 100, transform: isRight ? 'translate(910 0) scale(-1 1)' : undefined },
-                React.createElement("ellipse", { cx: "24", cy: "39", rx: "143", ry: "98", fill: soft }),
-                React.createElement("ellipse", { cx: "872", cy: "527", rx: "285", ry: "110", fill: soft }),
-                React.createElement("ellipse", { cx: "847", cy: "-3", rx: "123", ry: "110", fill: "#F8F1D9" }),
-                React.createElement("circle", { cx: "33", cy: "405", r: "35", fill: "#F5E7E4" }),
-                React.createElement("circle", { cx: "644", cy: "34", r: "22", fill: faint })),
+                React.createElement("ellipse", { cx: "24", cy: "39", rx: portrait ? 85 : 143, ry: "98", fill: soft }),
+                React.createElement("ellipse", { cx: portrait ? 537 : 872, cy: portrait ? 907 : 527, rx: portrait ? 180 : 285, ry: portrait ? 60 : 110, fill: soft }),
+                React.createElement("ellipse", { cx: portrait ? 537 : 847, cy: "-3", rx: portrait ? 78 : 123, ry: "110", fill: "#F8F1D9" }),
+                React.createElement("circle", { cx: portrait ? 8 : 33, cy: portrait ? 745 : 405, r: portrait ? 27 : 35, fill: "#F5E7E4" }),
+                React.createElement("circle", { cx: portrait ? 330 : 644, cy: "34", r: "22", fill: faint })),
             React.createElement(Motifs, { design: design, sparse: true })),
         background === 'stripe' && React.createElement(React.Fragment, null,
             React.createElement("g", { opacity: design.patternOpacity / 100 },
-                React.createElement("path", { d: "M530-30H940V64L831 157ZM-30 446 159 503 77 580H-30Z", fill: soft }),
-                React.createElement("path", { d: "M584-30H940V84L861 148ZM-30 437 155 507 103 580H-30Z", fill: `url(#${prefix}-stripes)`, opacity: ".36" }),
-                React.createElement("path", { d: "m759-30 181 105M-30 493l182 57", stroke: accent, strokeWidth: "5", opacity: ".6" })),
+                React.createElement("path", { d: portrait ? 'M380-30H580V85L510 127ZM-30 858 159 920 77 940H-30Z' : 'M530-30H940V64L831 157ZM-30 446 159 503 77 580H-30Z', fill: soft }),
+                React.createElement("path", { d: portrait ? 'M414-30H580V94L531 128ZM-30 867 155 927 103 940H-30Z' : 'M584-30H940V84L861 148ZM-30 437 155 507 103 580H-30Z', fill: `url(#${prefix}-stripes)`, opacity: ".36" }),
+                React.createElement("path", { d: portrait ? 'm429-30 151 105M-30 893l152 47' : 'm759-30 181 105M-30 493l182 57', stroke: accent, strokeWidth: "5", opacity: ".6" })),
             React.createElement(Motifs, { design: design, sparse: true })));
 }
 
@@ -676,6 +695,7 @@ exports.CardSvg = void 0;
 const React = __importStar(require("react"));
 const layout_1 = require("@/lib/layout");
 const Background_1 = require("./Background");
+const model_1 = require("@/lib/model");
 const robotAssets_1 = require("./robotAssets");
 const BrandIcon_1 = require("./BrandIcon");
 const avatar_1 = require("@/components/avatar.js");
@@ -692,26 +712,30 @@ function TextBlock({ fitted: f, color, prefix }) {
 exports.CardSvg = React.forwardRef(function CardSvg({ draft, layout, bleed = false, guides = false, className, avatar = '' }, ref) {
     const prefix = `card-${React.useId().replace(/:/g, '')}`;
     const { design, fields } = draft;
+    const portrait = design.orientation === 'portrait';
+    const paper = model_1.getPaperGeometry(design.orientation, bleed);
     const { contactRule, taglineRule } = layout;
-    const main = !avatar ? layout.main : design.layout === 'center'
+    const main = !avatar ? layout.main : portrait
+        ? { x:247, y:111 + layout.illustrationOffsetY, width:200, height:198 }
+        : design.layout === 'center'
         ? { x:454, y:34, width:125, height:124 }
         : { x:design.layout === 'right' ? 68 : 606, y:244, width:235, height:233 };
-    return React.createElement("svg", { ref: ref, xmlns: "http://www.w3.org/2000/svg", width: bleed ? '97mm' : '91mm', height: bleed ? '61mm' : '55mm', viewBox: bleed ? '-30 -30 970 610' : '0 0 910 550', className: className, role: "img", "aria-labelledby": `${prefix}-title` },
+    return React.createElement("svg", { ref: ref, xmlns: "http://www.w3.org/2000/svg", width: `${paper.width}mm`, height: `${paper.height}mm`, viewBox: paper.viewBox, className: className, role: "img", "aria-labelledby": `${prefix}-title` },
         React.createElement("title", { id: `${prefix}-title` },
             fields.name || '未入力',
             "\u306E\u540D\u523A\u30D7\u30EC\u30D3\u30E5\u30FC"),
-        React.createElement("desc", null, "91 \u00D7 55 mm\u3002\uFF7D\uFF80\uFF6F\uFF78\uFF81\uFF6C\uFF9D\u306E\u30A4\u30E9\u30B9\u30C8\u3092\u4F7F\u3063\u305FOSS\u540D\u523A\u3002"),
-        React.createElement("metadata", null, JSON.stringify({ ...draft, trim_mm: [91, 55], bleed_mm: bleed ? 3 : 0, color: 'sRGB', text: 'editable; local fonts; not outlined' })),
+        React.createElement("desc", null, `${paper.trimWidth} × ${paper.trimHeight} mm。ｽﾀｯｸﾁｬﾝのイラストを使ったOSS名刺。`),
+        React.createElement("metadata", null, JSON.stringify({ ...draft, trim_mm: [paper.trimWidth, paper.trimHeight], bleed_mm: bleed ? model_1.PAPER.bleed : 0, color: 'sRGB', text: 'editable; local fonts; not outlined' })),
         React.createElement(Background_1.Background, { design: design, prefix: prefix }),
         React.createElement("image", { "data-main-robot": "true", href: robotAssets_1.ROBOTS.main, x: main.x, y: main.y, width: main.width, height: main.height, preserveAspectRatio: "xMidYMid meet" }),
-        React.createElement(avatar_1.ThoughtBubble, { avatar:avatar, layout:design.layout, prefix:prefix }),
+        React.createElement(avatar_1.ThoughtBubble, { avatar:avatar, layout:design.layout, orientation:design.orientation, offsetY:layout.illustrationOffsetY, prefix:prefix }),
         fields.tagline.trim() && taglineRule && React.createElement("rect", { ...taglineRule, height: "3", fill: design.accent }),
         layout.contacts.length > 0 && React.createElement("rect", { ...contactRule, height: "2.7", fill: design.accent }),
         layout.texts.map(f => React.createElement(TextBlock, { key: f.id, fitted: f, color: f.id === 'tagline' ? '#646664' : '#252825', prefix: prefix })),
         layout.contacts.map(c => React.createElement(BrandIcon_1.BrandIcon, { key: c.kind, ...c, color: design.accent })),
         guides && React.createElement("g", { "data-guide": "true", fill: "none", strokeWidth: "1.2", pointerEvents: "none" },
-            React.createElement("rect", { x: ".6", y: ".6", width: "908.8", height: "548.8", stroke: "#e66d39", strokeDasharray: "7 5" }),
-            React.createElement("rect", { x: "30", y: "30", width: "850", height: "490", stroke: "#1e9b8a", strokeDasharray: "6 5" })));
+            React.createElement("rect", { x: ".6", y: ".6", width: paper.trimWidthUnits - 1.2, height: paper.trimHeightUnits - 1.2, stroke: "#e66d39", strokeDasharray: "7 5" }),
+            React.createElement("rect", { x: "30", y: "30", width: paper.trimWidthUnits - 60, height: paper.trimHeightUnits - 60, stroke: "#1e9b8a", strokeDasharray: "6 5" })));
 });
 
 },
@@ -774,14 +798,28 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BackgroundThumbnail = BackgroundThumbnail;
 exports.BackgroundPicker = BackgroundPicker;
 exports.DesignPanel = DesignPanel;
+exports.OrientationPicker = OrientationPicker;
 const React = __importStar(require("react"));
 const model_1 = require("@/lib/model");
+const layout_1 = require("@/lib/layout");
 const Background_1 = require("@/components/card/Background");
 const robotAssets_1 = require("@/components/card/robotAssets");
 const icons_1 = require("@/components/icons");
 function BackgroundThumbnail({ design, background }) {
     const prefix = `thumb-${React.useId().replace(/:/g, '')}`;
-    return React.createElement("svg", { viewBox: "0 0 910 550", "aria-hidden": "true", className: "background-thumb" },
+    const paper = model_1.getPaperGeometry(design.orientation);
+    if (design.orientation === 'portrait') {
+        const layout = layout_1.computeLayout(model_1.DEFAULT_DRAFT.fields, 'center', layout_1.approximateMeasure, 'portrait');
+        const rowY = id => { const text = layout.texts.find(text => text.id === id); return text.y + text.height / 2; };
+        return React.createElement("svg", { viewBox: paper.viewBox, "aria-hidden": "true", className: "background-thumb" },
+            React.createElement(Background_1.Background, { design: { ...design, background }, prefix }),
+            React.createElement("image", { href: robotAssets_1.ROBOTS.main, ...layout.main }),
+            React.createElement("rect", { x: 140, y: rowY('name') - 12.5, width: 270, height: 25, rx: 3, fill: '#505050' }),
+            React.createElement("rect", { x: 175, y: rowY('latinName') - 5, width: 200, height: 10, rx: 2, fill: '#b0b0b0' }),
+            React.createElement("rect", { x: 165, y: rowY('role') - 5, width: 220, height: 10, rx: 2, fill: '#b0b0b0' }),
+            React.createElement("rect", { x: 190, y: rowY('github') - 4.5, width: 170, height: 9, rx: 2, fill: design.accent }));
+    }
+    return React.createElement("svg", { viewBox: paper.viewBox, "aria-hidden": "true", className: "background-thumb" },
         React.createElement(Background_1.Background, { design: { ...design, background, layout: 'left' }, prefix: prefix }),
         React.createElement("rect", { x: "120", y: "220", width: "300", height: "25", rx: "3", fill: "#505050" }),
         React.createElement("rect", { x: "120", y: "269", width: "210", height: "10", rx: "2", fill: "#b0b0b0" }),
@@ -796,10 +834,21 @@ function BackgroundPicker({ design, onChange }) {
         React.createElement(BackgroundThumbnail, { design: design, background: bg.id }),
         React.createElement("span", { className: "tooltip" }, bg.name))));
 }
+function OrientationPicker({ design, onChange }) {
+    const instance = React.useId();
+    return React.createElement("fieldset", { className: 'orientation-picker' },
+        React.createElement("legend", null, '名刺の向き'),
+        React.createElement("div", { className: 'segmented-control' },
+            [['landscape', '横'], ['portrait', '縦']].map(([value, label]) =>
+                React.createElement("label", { key: value, className: `segment ${design.orientation === value ? 'selected' : ''}` },
+                    React.createElement("input", { type: 'radio', className: 'sr-only', name: `orientation-${instance}`, value,
+                        checked: design.orientation === value, onChange: () => onChange({ orientation: value }) }),
+                    React.createElement(icons_1.Icon, { name: value, size: 17 }), label))));
+}
 function DesignPanel({ design, onChange }) {
     const instance = React.useId();
     return React.createElement("div", { className: "design-panel" },
-        React.createElement("fieldset", null,
+        design.orientation !== 'portrait' && React.createElement("fieldset", null,
             React.createElement("legend", null, "\u914D\u7F6E"),
             React.createElement("div", { className: "segmented-control" }, model_1.LAYOUTS.map(l => React.createElement("label", { className: `segment has-tooltip ${design.layout === l.id ? 'selected' : ''}`, key: l.id },
                 React.createElement("input", { type: "radio", className: "sr-only", name: `layout-${instance}`, checked: design.layout === l.id, onChange: () => onChange({ layout: l.id }), "aria-label": l.name }),
@@ -959,14 +1008,15 @@ exports.AvatarEditor = function AvatarEditor({ avatar, onChange, onError }) {
                     React.createElement(Icon, { name:'trash', size:18 }),
                     React.createElement('span', { className:'tooltip', 'aria-hidden':true }, '画像を削除')))));
 };
-exports.ThoughtBubble = function ThoughtBubble({ avatar, layout, prefix }) {
+exports.ThoughtBubble = function ThoughtBubble({ avatar, layout, orientation = 'landscape', offsetY = 0, prefix }) {
     if (!avatar) return null;
+    const portrait = orientation === 'portrait';
     const center = layout === 'center';
-    const x = center ? 326 : layout === 'right' ? 94 : 642;
-    const y = center ? 12 : 56;
-    const size = center ? 112 : 174;
+    const x = portrait ? 110 : center ? 326 : layout === 'right' ? 94 : 642;
+    const y = portrait ? 42 + offsetY : center ? 12 : 56;
+    const size = portrait ? 150 : center ? 112 : 174;
     const radius = size/2;
-    const dots = center ? [[443,100,7],[452,113,4]] : [[x+118,236,9],[x+125,252,5]];
+    const dots = portrait ? [[247,190 + offsetY,8],[263,210 + offsetY,4]] : center ? [[443,100,7],[452,113,4]] : [[x+118,236,9],[x+125,252,5]];
     const clip = `${prefix}-avatar-clip`;
     return React.createElement('g', { 'data-avatar-bubble':'true' },
         React.createElement('defs', null, React.createElement('clipPath', { id:clip }, React.createElement('circle', { cx:x+radius, cy:y+radius, r:radius-9 }))),
@@ -1018,6 +1068,8 @@ const React = __importStar(require("react"));
  * Vendored nodes keep the standalone demo offline. See THIRD-PARTY-NOTICES.txt.
  */
 const nodes = {
+    landscape: React.createElement("rect", { x: 2, y: 6, width: 20, height: 12, rx: 2 }),
+    portrait: React.createElement("rect", { x: 6, y: 2, width: 12, height: 20, rx: 2 }),
     trash: React.createElement(React.Fragment, null,
         React.createElement("path", { d:"M3 6h18" }),
         React.createElement("path", { d:"M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" }),
@@ -1371,6 +1423,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.prepareSvg = prepareSvg;
 exports.exportCard = exportCard;
 const png_ts_1 = require("./png.ts");
+const model_1 = require("./model.ts");
 const imageCache = new Map();
 async function asDataUrl(url) {
     if (url.startsWith('data:'))
@@ -1393,18 +1446,19 @@ async function asDataUrl(url) {
     return imageCache.get(url);
 }
 /** Clone first so edits made while exporting cannot change the captured card. */
-async function prepareSvg(source, bleed) {
+async function prepareSvg(source, bleed, orientation = 'landscape') {
+    const paper = model_1.getPaperGeometry(orientation, bleed);
     const clone = source.cloneNode(true);
     clone.removeAttribute('class');
     clone.removeAttribute('style');
-    clone.setAttribute('width', bleed ? '97mm' : '91mm');
-    clone.setAttribute('height', bleed ? '61mm' : '55mm');
-    clone.setAttribute('viewBox', bleed ? '-30 -30 970 610' : '0 0 910 550');
+    clone.setAttribute('width', `${paper.width}mm`);
+    clone.setAttribute('height', `${paper.height}mm`);
+    clone.setAttribute('viewBox', paper.viewBox);
     clone.querySelectorAll('[data-guide]').forEach(n => n.remove());
     const metadata = clone.querySelector('metadata');
     if (metadata?.textContent) {
         try {
-            metadata.textContent = JSON.stringify({ ...JSON.parse(metadata.textContent), bleed_mm: bleed ? 3 : 0 });
+            metadata.textContent = JSON.stringify({ ...JSON.parse(metadata.textContent), trim_mm: [paper.trimWidth, paper.trimHeight], bleed_mm: bleed ? model_1.PAPER.bleed : 0 });
         }
         catch { /* Optional metadata does not affect art. */ }
     }
@@ -1444,7 +1498,8 @@ async function imageFromSvg(svg) {
         URL.revokeObjectURL(url);
     }
 }
-async function exportCard(source, format, bleed, name) {
+async function exportCard(source, format, bleed, name, orientation = 'landscape') {
+    const paper = model_1.getPaperGeometry(orientation, bleed);
     // The window must be opened during the click, not after an awaited promise.
     const printWindow = format === 'print' ? window.open('', '_blank') : null;
     if (format === 'print' && !printWindow)
@@ -1455,7 +1510,7 @@ async function exportCard(source, format, bleed, name) {
         printWindow.document.body.textContent = '印刷データを準備しています…';
     }
     try {
-        const svg = await prepareSvg(source, bleed);
+        const svg = await prepareSvg(source, bleed, orientation);
         await document.fonts.ready;
         const file = safeFileName(name) + (bleed ? '-bleed' : '');
         if (format === 'svg') {
@@ -1464,8 +1519,8 @@ async function exportCard(source, format, bleed, name) {
         }
         if (format === 'png') {
             const dpi = 600;
-            const width = Math.round((bleed ? 97 : 91) / 25.4 * dpi);
-            const height = Math.round((bleed ? 61 : 55) / 25.4 * dpi);
+            const width = Math.round(paper.width / 25.4 * dpi);
+            const height = Math.round(paper.height / 25.4 * dpi);
             svg.setAttribute('width', String(width));
             svg.setAttribute('height', String(height));
             const image = await imageFromSvg(svg);
@@ -1482,8 +1537,7 @@ async function exportCard(source, format, bleed, name) {
             return;
         }
         if (printWindow) {
-            const width = bleed ? 97 : 91;
-            const height = bleed ? 61 : 55;
+            const { width, height } = paper;
             const doc = printWindow.document;
             doc.documentElement.lang = 'ja';
             doc.title = file;
@@ -1610,8 +1664,9 @@ function fitText(spec, measure) {
     }
     return result;
 }
-function computeLayout(fields, layout, measure) {
-    const center = layout === 'center';
+function computeLayout(fields, layout, measure, orientation = 'landscape') {
+    const portrait = orientation === 'portrait';
+    const center = portrait || layout === 'center';
     const x = layout === 'right' ? 359 : 112;
     const normalized = [
         { kind: 'email', text: fields.email.trim() },
@@ -1621,18 +1676,23 @@ function computeLayout(fields, layout, measure) {
         { kind: 'x', text: (0, model_ts_1.normalizeAccount)(fields.x, 'x') },
     ].filter(contact => contact.text);
     const contactCount = normalized.length;
-    const contactHeight = center
+    const contactHeight = portrait ? 32 : center
         ? contactCount >= 5 ? 20 : contactCount === 4 ? 23 : contactCount >= 3 ? 28 : 32
         : contactCount >= 5 ? 24 : contactCount === 4 ? 28 : 34;
-    const contactGap = center
+    const contactGap = portrait ? 8 : center
         ? contactCount >= 5 ? 1 : contactCount === 4 ? 2 : contactCount >= 3 ? 4 : 8
         : contactCount >= 5 ? 3 : contactCount === 4 ? 4 : 10;
-    const contactIconSize = center
+    const contactIconSize = portrait ? 25 : center
         ? contactCount >= 5 ? 18 : contactCount === 4 ? 20 : 27
         : contactCount >= 5 ? 20 : contactCount === 4 ? 22 : 27;
     const common = { weight: 400, tracking: .3, align: center ? 'center' : 'left' };
     const spec = (id, box, fontSize, minFont, maxLines = 1, extra = {}) => ({ ...common, ...box, id, text: fields[id], fontSize, minFont, maxLines, ...extra });
-    const styles = center ? {
+    const styles = portrait ? {
+        name: { x: 55, width: 440, height: 96, fontSize: 60, minFont: 30, maxLines: 2, weight: 700, tracking: 2 },
+        latinName: { x: 55, width: 440, height: 34, fontSize: 27, minFont: 15, maxLines: 1, tracking: 1.8 },
+        role: { x: 55, width: 440, height: 58, fontSize: 25, minFont: 16, maxLines: 2 },
+        tagline: { x: 65, width: 420, height: 50, fontSize: 18.5, minFont: 12, maxLines: 2, tracking: .6 },
+    } : center ? {
         name: { x: 142, width: 626, height: 80, fontSize: 64, minFont: 31, maxLines: 2, weight: 700, tracking: 2 },
         latinName: { x: 152, width: 606, height: 34, fontSize: 27, minFont: 15, maxLines: 1, tracking: 1.8 },
         role: { x: 138, width: 634, height: 52, fontSize: 25, minFont: 16, maxLines: 2 },
@@ -1671,10 +1731,13 @@ function computeLayout(fields, layout, measure) {
             return 14;
         return 0;
     };
-    const contentTop = center ? 170 : 64;
-    const contentBottom = 530;
+    const contentTop = portrait ? 330 : center ? 170 : 64;
+    const contentBottom = portrait ? 870 : 530;
     const totalHeight = items.reduce((sum, item, index) => sum + item.height + (index ? gapBetween(items[index - 1], item) : 0), 0);
-    let cursor = contentTop + Math.max(0, (contentBottom - contentTop - totalHeight) / 2);
+    const freeSpace = Math.max(0, (contentBottom - contentTop - totalHeight) / 2);
+    // Keep art and text together, then center the complete portrait composition.
+    const illustrationOffsetY = portrait ? Math.max(0, (910 - (contentTop + totalHeight + 42)) / 2) : 0;
+    let cursor = contentTop + (portrait ? illustrationOffsetY : freeSpace);
     let contactRuleY = cursor;
     let taglineRule = null;
     const texts = [];
@@ -1698,28 +1761,38 @@ function computeLayout(fields, layout, measure) {
         }
         normalized.forEach(({ kind, text }, contactIndex) => {
             const y = cursor + contactIndex * (contactHeight + contactGap);
-            const box = center ? { x: 294, y, width: 353, height: contactHeight } : { x: x + 55, y, width: 379, height: contactHeight };
+            const box = portrait ? { x: 96, y, width: 399, height: contactHeight } : center ? { x: 294, y, width: 353, height: contactHeight } : { x: x + 55, y, width: 379, height: contactHeight };
             const email = kind === 'email';
             const website = kind === 'website1' || kind === 'website2';
             const accountText = kind === 'x' ? '@' + text : text;
-            const compact = contactCount >= 4;
+            const compact = !portrait && contactCount >= 4;
             const fontSize = email
                 ? center ? compact ? 16 : 19 : compact ? 18 : 22
                 : center ? compact ? 18 : 24 : compact ? 21 : 26.5;
             const minFont = email ? 11 : website ? 12 : 16;
             const iconTextOffset = contactIconSize + (center ? 16 : 28);
             const fitted = fitText(spec(kind, box, fontSize, minFont, 1, { text: accountText, align: 'left' }), measure);
-            if (center)
+            if (center && !portrait)
                 fitted.x = 455 - ((fitted.sizes[0] ?? 0) + iconTextOffset) / 2 + iconTextOffset;
             contacts.push({ kind, x: fitted.x - (center ? iconTextOffset : 55), y: y + (contactHeight - contactIconSize) / 2 - 1, size: contactIconSize });
             texts.push({ ...fitted, fontSize: fitted.font });
         });
         cursor += item.height;
     });
+    const fittedTexts = texts.map(text => fitText(text, measure));
+    if (portrait && contacts.length) {
+        const contactTexts = fittedTexts.filter(text => contacts.some(contact => contact.kind === text.id));
+        const textWidth = Math.max(...contactTexts.map(text => Math.min(text.width, Math.max(...text.sizes))));
+        const iconTextOffset = contactIconSize + 16;
+        const left = (550 - textWidth - iconTextOffset) / 2;
+        contacts.forEach(contact => { contact.x = left; });
+        contactTexts.forEach(text => { text.x = left + iconTextOffset; });
+    }
     return {
-        texts: texts.map(text => fitText(text, measure)), contacts,
-        main: center ? { x: 383, y: 21, width: 144, height: 143 } : layout === 'right' ? { x: 61, y: 181, width: 251, height: 249 } : { x: 595, y: 181, width: 251, height: 249 },
-        contactRule: { x: center ? 430 : x, y: contactRuleY, width: 52 },
+        texts: fittedTexts, contacts,
+        ...(portrait ? { illustrationOffsetY } : {}),
+        main: portrait ? { x: 160, y: 66 + illustrationOffsetY, width: 230, height: 228 } : center ? { x: 383, y: 21, width: 144, height: 143 } : layout === 'right' ? { x: 61, y: 181, width: 251, height: 249 } : { x: 595, y: 181, width: 251, height: 249 },
+        contactRule: { x: portrait ? 249 : center ? 430 : x, y: contactRuleY, width: 52 },
         taglineRule: center ? null : taglineRule,
     };
 }
@@ -1735,8 +1808,21 @@ exports.normalizeWebsite = normalizeWebsite;
 exports.restoreDraft = restoreDraft;
 exports.loadDraft = loadDraft;
 exports.mixWithWhite = mixWithWhite;
+exports.getPaperGeometry = getPaperGeometry;
 exports.STORAGE_KEY = 'stackchan-card-studio:v1';
 exports.PAPER = { width: 91, height: 55, bleed: 3, unitsPerMm: 10 };
+function getPaperGeometry(orientation = 'landscape', bleed = false) {
+    const portrait = orientation === 'portrait';
+    const trimWidth = portrait ? exports.PAPER.height : exports.PAPER.width;
+    const trimHeight = portrait ? exports.PAPER.width : exports.PAPER.height;
+    const margin = bleed ? exports.PAPER.bleed : 0;
+    const width = trimWidth + margin * 2;
+    const height = trimHeight + margin * 2;
+    const units = exports.PAPER.unitsPerMm;
+    return { trimWidth, trimHeight, width, height,
+        trimWidthUnits: trimWidth * units, trimHeightUnits: trimHeight * units,
+        viewBox: `${-margin * units} ${-margin * units} ${width * units} ${height * units}` };
+}
 exports.BACKGROUNDS = [
     { id: 'scatter', name: '仲間たち', description: 'いつものｽﾀｯｸﾁｬﾝを、散りばめて。' },
     { id: 'blueprint', name: '設計図', description: '細い方眼と、ものづくりの空気感。' },
@@ -1765,7 +1851,7 @@ exports.DEFAULT_DRAFT = {
         tagline: 'Communication Robots\nin Your Hand',
         email: '', website1: '', website2: '', github: 'meganetaaan', x: 'meganetaaan',
     },
-    design: { background: 'scatter', layout: 'left', accent: '#F47721', patternOpacity: 85 },
+    design: { background: 'scatter', layout: 'left', orientation: 'landscape', accent: '#F47721', patternOpacity: 85 },
 };
 exports.FIELD_LIMITS = {
     name: 60, latinName: 100, role: 140, tagline: 180, email: 254, website1: 2048, website2: 2048, github: 80, x: 80,
@@ -1806,6 +1892,8 @@ function restoreDraft(input) {
     }
     if (source.design && typeof source.design === 'object') {
         const d = source.design;
+        if (d.orientation === 'landscape' || d.orientation === 'portrait')
+            fallback.design.orientation = d.orientation;
         if (exports.BACKGROUNDS.some(b => b.id === d.background))
             fallback.design.background = d.background;
         if (exports.LAYOUTS.some(l => l.id === d.layout))
