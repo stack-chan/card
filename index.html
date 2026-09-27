@@ -137,6 +137,7 @@ h1,h2,p { margin:0; }
 .app-header { height:56px; border-bottom:1px solid var(--line); background:white; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:0 24px; position:relative; z-index:5; }
 .brand { display:flex; align-items:center; gap:14px; font-size:14px; font-weight:600; line-height:1; white-space:nowrap; }
 .brand span { font-size:12px; font-weight:400; color:var(--muted); padding-left:14px; border-left:1px solid #d9d9d9; }
+.brand-version { font-size:10px; font-weight:400; color:var(--muted); margin-left:-6px; }
 .ui-button { display:inline-flex; align-items:center; justify-content:center; gap:8px; height:36px; min-width:36px; padding:0 12px; font-size:12px; font-weight:500; border:1px solid transparent; border-radius:var(--radius); background:var(--ink); color:white; white-space:nowrap; transition:background .12s; }
 .ui-button:hover:not(:disabled) { background:#404040; }
 .ui-button[data-variant=ghost] { background:transparent; color:var(--ink); }
@@ -402,7 +403,8 @@ function App() {
         React.createElement("header", { className: "app-header" },
             React.createElement("h1", { className: "brand" },
                 "Stack-chan ",
-                React.createElement("span", null, "\u540D\u523A")),
+                React.createElement("span", null, "\u540D\u523A"),
+                React.createElement("small", { className: "brand-version" }, "v0.1.0")),
             React.createElement(popover_1.Popover, { open: exportOpen, onOpenChange: setExportOpen, label: "\u66F8\u304D\u51FA\u3057", align: "end", trigger: React.createElement(button_1.Button, { size: "sm", "aria-busy": !!busy, disabled: !!busy, className: "export-button" },
                     React.createElement(icons_1.Icon, { name: "download", size: 16 }),
                     React.createElement("span", null, busy ? '書き出し中' : '書き出し')) },
@@ -1488,42 +1490,98 @@ function fitText(spec, measure) {
 function computeLayout(fields, layout, measure) {
     const center = layout === 'center';
     const x = layout === 'right' ? 359 : 112;
-    const normalized = ['email', 'github', 'x']
-        .map(kind => ({ kind, text: kind === 'email' ? fields.email.trim() : (0, model_ts_1.normalizeAccount)(fields[kind], kind) }))
-        .filter(a => a.text);
+    const normalized = [
+        { kind: 'email', text: fields.email.trim() },
+        { kind: 'github', text: (0, model_ts_1.normalizeAccount)(fields.github, 'github') },
+        { kind: 'x', text: (0, model_ts_1.normalizeAccount)(fields.x, 'x') },
+    ].filter(contact => contact.text);
     const compactContacts = center && normalized.length >= 3;
-    const align = center ? 'center' : 'left';
-    const common = { weight: 400, tracking: .3, align };
-    const spec = (id, box, f, min, maxLines = 1, extra = {}) => ({ ...common, ...box, id, text: fields[id], fontSize: f, minFont: min, maxLines, ...extra });
-    const texts = center ? [
-        spec('name', { x: 142, y: 174, width: 626, height: 80 }, 64, 31, 2, { weight: 700, tracking: 2 }),
-        spec('latinName', { x: 152, y: 261, width: 606, height: 34 }, 27, 15, 1, { tracking: 1.8 }),
-        spec('role', { x: 138, y: 309, width: 634, height: 52 }, 25, 16, 2),
-        spec('tagline', { x: 230, y: 484, width: 450, height: 38 }, 15.5, 12, 2, { tracking: .6 }),
-    ] : [
-        spec('tagline', { x: x + 66, y: 70, width: 367, height: 51 }, 18.5, 13, 2, { tracking: 1 }),
-        spec('name', { x: x - 3, y: 165, width: 437, height: 97 }, 76, 32, 2, { weight: 700, tracking: 2 }),
-        spec('latinName', { x, y: 264, width: 436, height: 35 }, 28.5, 17, 1, { tracking: 1.6 }),
-        spec('role', { x, y: 318, width: 436, height: 55 }, 25.5, 16, 2, { tracking: .3 }),
-    ];
+    const contactHeight = center ? compactContacts ? 28 : 32 : 34;
+    const contactGap = center ? compactContacts ? 4 : 8 : 10;
+    const common = { weight: 400, tracking: .3, align: center ? 'center' : 'left' };
+    const spec = (id, box, fontSize, minFont, maxLines = 1, extra = {}) => ({ ...common, ...box, id, text: fields[id], fontSize, minFont, maxLines, ...extra });
+    const styles = center ? {
+        name: { x: 142, width: 626, height: 80, fontSize: 64, minFont: 31, maxLines: 2, weight: 700, tracking: 2 },
+        latinName: { x: 152, width: 606, height: 34, fontSize: 27, minFont: 15, maxLines: 1, tracking: 1.8 },
+        role: { x: 138, width: 634, height: 52, fontSize: 25, minFont: 16, maxLines: 2 },
+        tagline: { x: 230, width: 450, height: 38, fontSize: 15.5, minFont: 12, maxLines: 2, tracking: .6 },
+    } : {
+        tagline: { x: x + 66, width: 367, height: 51, fontSize: 18.5, minFont: 13, maxLines: 2, tracking: 1 },
+        name: { x: x - 3, width: 437, height: 97, fontSize: 76, minFont: 32, maxLines: 2, weight: 700, tracking: 2 },
+        latinName: { x, width: 436, height: 35, fontSize: 28.5, minFont: 17, maxLines: 1, tracking: 1.6 },
+        role: { x, width: 436, height: 55, fontSize: 25.5, minFont: 16, maxLines: 2, tracking: .3 },
+    };
+    const fieldOrder = center ? ['name', 'latinName', 'role'] : ['tagline', 'name', 'latinName', 'role'];
+    const items = fieldOrder.filter(id => fields[id].trim()).map(id => ({ kind: 'text', id, height: styles[id].height }));
+    if (normalized.length) {
+        items.push({ kind: 'rule', height: 3 });
+        items.push({ kind: 'contacts', height: normalized.length * contactHeight + (normalized.length - 1) * contactGap });
+    }
+    if (center && fields.tagline.trim())
+        items.push({ kind: 'text', id: 'tagline', height: styles.tagline.height });
+    const gapBetween = (previous, next) => {
+        if (previous.kind === 'text' && next.kind === 'text') {
+            if (previous.id === 'name' && next.id === 'latinName')
+                return center ? 6 : 4;
+            if (previous.id === 'latinName' && next.id === 'role')
+                return center ? 10 : 12;
+            if (previous.id === 'tagline')
+                return 24;
+            if (previous.id === 'name')
+                return 12;
+            return 18;
+        }
+        if (previous.kind === 'text' && next.kind === 'rule')
+            return previous.id === 'role' ? 9 : 16;
+        if (previous.kind === 'rule' && next.kind === 'contacts')
+            return center ? 8 : 12;
+        if (previous.kind === 'contacts' && next.kind === 'text')
+            return 14;
+        return 0;
+    };
+    const contentTop = center ? 170 : 64;
+    const contentBottom = 530;
+    const totalHeight = items.reduce((sum, item, index) => sum + item.height + (index ? gapBetween(items[index - 1], item) : 0), 0);
+    let cursor = contentTop + Math.max(0, (contentBottom - contentTop - totalHeight) / 2);
+    let contactRuleY = cursor;
+    let taglineRule = null;
+    const texts = [];
     const contacts = [];
-    normalized.forEach(({ kind, text }, index) => {
-        const box = center
-            ? compactContacts ? { x: 294, y: 389 + index * 31, width: 353, height: 28 } : { x: 294, y: 397 + index * 40, width: 353, height: 32 }
-            : { x: x + 55, y: 401 + index * 44, width: 379, height: 34 };
-        const accountText = kind === 'x' ? '@' + text : text;
-        const email = kind === 'email';
-        const fitted = fitText(spec(kind, box, email ? center ? 19 : 22 : center ? 24 : 26.5, email ? 11 : 16, 1, { text: accountText, align: 'left' }), measure);
-        if (center)
-            fitted.x = 455 - ((fitted.sizes[0] ?? 0) + 43) / 2 + 43;
-        contacts.push({ kind, x: fitted.x - (center ? 43 : 55), y: box.y + (box.height - 27) / 2 - 1 });
-        texts.push({ ...fitted, fontSize: fitted.font });
+    items.forEach((item, index) => {
+        if (index)
+            cursor += gapBetween(items[index - 1], item);
+        if (item.kind === 'text') {
+            const style = styles[item.id];
+            const textSpec = spec(item.id, { x: style.x, y: cursor, width: style.width, height: style.height }, style.fontSize, style.minFont, style.maxLines, { weight: style.weight ?? 400, tracking: style.tracking ?? .3 });
+            texts.push(textSpec);
+            if (item.id === 'tagline' && !center)
+                taglineRule = { x, y: cursor + 16, width: 50 };
+            cursor += item.height;
+            return;
+        }
+        if (item.kind === 'rule') {
+            contactRuleY = cursor;
+            cursor += item.height;
+            return;
+        }
+        normalized.forEach(({ kind, text }, contactIndex) => {
+            const y = cursor + contactIndex * (contactHeight + contactGap);
+            const box = center ? { x: 294, y, width: 353, height: contactHeight } : { x: x + 55, y, width: 379, height: contactHeight };
+            const email = kind === 'email';
+            const accountText = kind === 'x' ? '@' + text : text;
+            const fitted = fitText(spec(kind, box, email ? center ? 19 : 22 : center ? 24 : 26.5, email ? 11 : 16, 1, { text: accountText, align: 'left' }), measure);
+            if (center)
+                fitted.x = 455 - ((fitted.sizes[0] ?? 0) + 43) / 2 + 43;
+            contacts.push({ kind, x: fitted.x - (center ? 43 : 55), y: y + (contactHeight - 27) / 2 - 1 });
+            texts.push({ ...fitted, fontSize: fitted.font });
+        });
+        cursor += item.height;
     });
     return {
-        texts: texts.map(t => fitText(t, measure)), contacts,
+        texts: texts.map(text => fitText(text, measure)), contacts,
         main: center ? { x: 383, y: 21, width: 144, height: 143 } : layout === 'right' ? { x: 61, y: 181, width: 251, height: 249 } : { x: 595, y: 181, width: 251, height: 249 },
-        contactRule: { x: center ? 430 : x, y: center ? 380 : 382, width: 52 },
-        taglineRule: center ? null : { x, y: 86, width: 50 },
+        contactRule: { x: center ? 430 : x, y: contactRuleY, width: 52 },
+        taglineRule: center ? null : taglineRule,
     };
 }
 
