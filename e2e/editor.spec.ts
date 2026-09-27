@@ -25,6 +25,13 @@ test('idle screen contains the current editor, backgrounds and preview', async (
   for (const removed of ['YOUR CARD', 'LIVE PREVIEW', '保存済み', '6 PATTERNS', '自動フィット', '入力して']) expect(text).not.toContain(removed)
 })
 
+test('header shows the version and links to the card repository', async ({ page }) => {
+  await expect(page.locator('.brand-version')).toContainText('v0.2.0')
+  const repository = page.getByRole('link', { name: 'GitHubでcardのリポジトリを見る' })
+  await expect(repository).toHaveAttribute('href', 'https://github.com/stack-chan/card')
+  await expect(repository.locator('svg')).toBeVisible()
+})
+
 test('editing updates the card and survives a reload', async ({ page }) => {
   await page.getByLabel('名前', { exact: true }).fill('開発者 太郎')
   await expect(page.locator('.preview-card [data-field="name"]')).toHaveText('開発者 太郎')

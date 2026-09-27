@@ -6,6 +6,7 @@ import { FieldsPanel } from '@/components/editor/FieldsPanel'
 import { BackgroundPicker, DesignPanel, OrientationPicker } from '@/components/editor/DesignPanel'
 import { AvatarEditor } from '@/components/editor/AvatarEditor'
 import { CardSvg } from '@/components/card/CardSvg'
+import { BrandIcon } from '@/components/card/BrandIcon'
 import { useAvatar } from '@/hooks/useAvatar'
 import { computeLayout, createBrowserMeasure } from '@/lib/layout'
 import { DEFAULT_DRAFT, STORAGE_KEY, cleanField, getPaperGeometry, loadDraft, type CardFields, type CardDesign } from '@/lib/model'
@@ -74,7 +75,13 @@ export default function App() {
       html,body,.app-shell,.workspace,.preview-region,.paper-wrap,.preview-card { width:${paper.width}mm; height:${paper.height}mm; }
       .app-shell[data-orientation] .paper-wrap { max-width:none; }`}</style>
     <header className="app-header">
-      <h1 className="brand">Stack-chan <span>名刺</span><small className="brand-version">v0.1.0</small></h1>
+      <h1 className="brand">Stack-chan <span>名刺</span>
+        <small className="brand-version">v0.2.0
+          <a href="https://github.com/stack-chan/card" target="_blank" rel="noopener noreferrer" aria-label="GitHubでcardのリポジトリを見る" title="GitHubでcardのリポジトリを見る">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><BrandIcon kind="github" size={24} /></svg>
+          </a>
+        </small>
+      </h1>
       <Popover open={exportOpen} onOpenChange={setExportOpen} label="書き出し" align="end"
         trigger={<Button size="sm" aria-busy={!!busy} disabled={!!busy} className="export-button"><Icon name="download" size={16} /><span>{busy ? '書き出し中' : '書き出し'}</span></Button>}>
         <div className="export-options">
