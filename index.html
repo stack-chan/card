@@ -241,6 +241,19 @@ h1,h2,p { margin:0; }
   [data-guide] { display:none; }
   * { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 }
+
+.avatar-editor { margin-bottom:24px; padding-bottom:20px; border-bottom:1px solid var(--line); }
+.avatar-editor h2 { font-size:13px; font-weight:600; margin:0 0 10px; }
+.avatar-controls { display:flex; align-items:center; gap:12px; }
+.avatar-controls img { border-radius:50%; object-fit:cover; flex-shrink:0; }
+.avatar-actions { display:flex; align-items:center; flex-wrap:wrap; gap:8px; position:relative; }
+.avatar-file-label { font-size:13px; padding:7px 12px; border:1px solid #d9ddda; border-radius:6px; cursor:pointer; background:white; }
+.avatar-file-label:hover { background:#f4f5f4; }
+.avatar-file { position:absolute; width:1px; height:1px; opacity:0; }
+.avatar-actions:has(.avatar-file:focus-visible) .avatar-file-label { outline:2px solid #168577; outline-offset:3px; }
+.avatar-editor[aria-busy="true"] .avatar-file-label { opacity:.5; cursor:wait; }
+.avatar-remove { font:inherit; font-size:12px; color:#656a66; background:none; border:none; cursor:pointer; padding:7px; }
+.avatar-help { margin:9px 0 0; font-size:11px; line-height:1.6; color:#6b726d; }
 </style></head><body><div id="root"></div><script>/* Bundled React 18.2.0 / ReactDOM, MIT. */
 /**
  * @license React
@@ -327,6 +340,7 @@ const CardSvg_1 = require("@/components/card/CardSvg");
 const layout_1 = require("@/lib/layout");
 const model_1 = require("@/lib/model");
 const export_1 = require("@/lib/export");
+const avatar_1 = require('@/components/avatar.js');
 const DRAFT_SAVE_DEBOUNCE_MS = 350;
 function App() {
     const [draft, setDraft] = React.useState(model_1.loadDraft);
@@ -334,6 +348,8 @@ function App() {
     const [guides, setGuides] = React.useState(false);
     const [busy, setBusy] = React.useState(null);
     const [error, setError] = React.useState('');
+    const [avatar, changeAvatar] = avatar_1.useAvatar(setError);
+    const [avatarRevision, setAvatarRevision] = React.useState(0);
     const [fontEpoch, setFontEpoch] = React.useState(0);
     const [exportOpen, setExportOpen] = React.useState(false);
     const [settingsOpen, setSettingsOpen] = React.useState(false);
@@ -376,6 +392,8 @@ function App() {
     const reset = () => {
         if (window.confirm('入力内容とデザインを初期値に戻しますか？')) {
             setDraft(structuredClone(model_1.DEFAULT_DRAFT));
+            changeAvatar('');
+            setAvatarRevision(n => n + 1);
             setBleed(false);
             setGuides(false);
             setSettingsOpen(false);
@@ -426,6 +444,7 @@ function App() {
                 invalid && React.createElement("p", { className: "export-error", role: "alert" }, "\u5165\u529B\u5185\u5BB9\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002"))),
         React.createElement("main", { className: "workspace" },
             React.createElement("aside", { className: "editor-sidebar", "aria-label": "\u540D\u523A\u306E\u7DE8\u96C6" },
+                React.createElement(avatar_1.AvatarEditor, { key: avatarRevision, avatar: avatar, onChange: changeAvatar, onError: setError }),
                 React.createElement(FieldsPanel_1.FieldsPanel, { fields: draft.fields, onChange: changeField, errors: fieldErrors }),
                 React.createElement("section", { className: "background-section", "aria-labelledby": "background-label" },
                     React.createElement("div", { className: "section-heading" },
@@ -446,7 +465,7 @@ function App() {
             React.createElement("section", { className: "preview-region", "aria-label": "\u540D\u523A\u30D7\u30EC\u30D3\u30E5\u30FC" },
                 React.createElement("div", { className: "paper-wrap", style: { '--paper-ratio': bleed ? 97 / 61 : 91 / 55 } },
                     React.createElement("div", { className: `preview-card ${bleed ? 'with-bleed' : ''}`, "data-testid": "preview-card" },
-                        React.createElement(CardSvg_1.CardSvg, { ref: svgRef, draft: draft, layout: layout, bleed: bleed, guides: guides })),
+                        React.createElement(CardSvg_1.CardSvg, { ref: svgRef, draft: draft, layout: layout, bleed: bleed, guides: guides, avatar: avatar })),
                     React.createElement("div", { className: "paper-caption" },
                         React.createElement("span", null, small && !invalid ? '文字サイズが小さくなっています。' : ''),
                         React.createElement("span", null, bleed ? '97 × 61 mm' : '91 × 55 mm'))))),
@@ -663,6 +682,7 @@ const layout_1 = require("@/lib/layout");
 const Background_1 = require("./Background");
 const robotAssets_1 = require("./robotAssets");
 const BrandIcon_1 = require("./BrandIcon");
+const avatar_1 = require("@/components/avatar.js");
 function TextBlock({ fitted: f, color, prefix }) {
     if (!f.lines.length)
         return null;
@@ -673,10 +693,13 @@ function TextBlock({ fitted: f, color, prefix }) {
                 React.createElement("rect", { x: f.x, y: f.y, width: f.width, height: f.height }))),
         React.createElement("g", { clipPath: f.overflow ? `url(#${clipId})` : undefined }, f.lines.map((line, i) => React.createElement("text", { key: i, x: f.align === 'center' ? f.x + f.width / 2 : f.x, y: f.firstBaseline + i * f.lineHeight, textAnchor: f.align === 'center' ? 'middle' : 'start', fontFamily: layout_1.CARD_FONT, fontSize: f.font, fontWeight: f.weight, letterSpacing: f.tracking, style: { fontKerning: 'none', fontVariantLigatures: 'none' }, fill: color }, line))));
 }
-exports.CardSvg = React.forwardRef(function CardSvg({ draft, layout, bleed = false, guides = false, className }, ref) {
+exports.CardSvg = React.forwardRef(function CardSvg({ draft, layout, bleed = false, guides = false, className, avatar = '' }, ref) {
     const prefix = `card-${React.useId().replace(/:/g, '')}`;
     const { design, fields } = draft;
-    const { main, contactRule, taglineRule } = layout;
+    const { contactRule, taglineRule } = layout;
+    const main = !avatar ? layout.main : design.layout === 'center'
+        ? { x:454, y:34, width:125, height:124 }
+        : { x:design.layout === 'right' ? 68 : 606, y:244, width:235, height:233 };
     return React.createElement("svg", { ref: ref, xmlns: "http://www.w3.org/2000/svg", width: bleed ? '97mm' : '91mm', height: bleed ? '61mm' : '55mm', viewBox: bleed ? '-30 -30 970 610' : '0 0 910 550', className: className, role: "img", "aria-labelledby": `${prefix}-title` },
         React.createElement("title", { id: `${prefix}-title` },
             fields.name || '未入力',
@@ -685,6 +708,7 @@ exports.CardSvg = React.forwardRef(function CardSvg({ draft, layout, bleed = fal
         React.createElement("metadata", null, JSON.stringify({ ...draft, trim_mm: [91, 55], bleed_mm: bleed ? 3 : 0, color: 'sRGB', text: 'editable; local fonts; not outlined' })),
         React.createElement(Background_1.Background, { design: design, prefix: prefix }),
         React.createElement("image", { "data-main-robot": "true", href: robotAssets_1.ROBOTS.main, x: main.x, y: main.y, width: main.width, height: main.height, preserveAspectRatio: "xMidYMid meet" }),
+        React.createElement(avatar_1.ThoughtBubble, { avatar:avatar, layout:design.layout, prefix:prefix }),
         fields.tagline.trim() && taglineRule && React.createElement("rect", { ...taglineRule, height: "3", fill: design.accent }),
         layout.contacts.length > 0 && React.createElement("rect", { ...contactRule, height: "2.7", fill: design.accent }),
         layout.texts.map(f => React.createElement(TextBlock, { key: f.id, fitted: f, color: f.id === 'tagline' ? '#646664' : '#252825', prefix: prefix })),
@@ -861,6 +885,91 @@ function FieldsPanel({ fields, onChange, errors }) {
     }));
 }
 
+},
+"src/components/avatar.js":function(module,exports,require){
+const React = require('react');
+const KEY = 'stackchan-card-studio:avatar:v1';
+const MAX_STORED_LENGTH = 400000;
+function validImage(value) {
+    return typeof value === 'string' && value.length <= MAX_STORED_LENGTH && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(value);
+}
+function loadAvatar() {
+    try { const value = localStorage.getItem(KEY); return validImage(value) ? value : ''; }
+    catch { return ''; }
+}
+exports.useAvatar = function useAvatar(onError) {
+    const [avatar, setAvatar] = React.useState(loadAvatar);
+    React.useEffect(() => {
+        const save = () => {
+            try {
+                if (avatar) localStorage.setItem(KEY, avatar);
+                else localStorage.removeItem(KEY);
+            } catch { onError('画像をこのブラウザに保存できません。現在の画像は書き出せます。'); }
+        };
+        const timer = setTimeout(save, 350);
+        window.addEventListener('pagehide', save);
+        return () => { clearTimeout(timer); window.removeEventListener('pagehide', save); };
+    }, [avatar, onError]);
+    const changeAvatar = React.useCallback(value => { onError(''); setAvatar(value); }, [onError]);
+    return [avatar, changeAvatar];
+};
+async function prepareAvatar(file) {
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type))
+        throw new Error('PNG・JPEG・WebPの画像を選んでください。');
+    if (file.size > 10 * 1024 * 1024) throw new Error('画像は10MB以下にしてください。');
+    const url = URL.createObjectURL(file);
+    try {
+        const img = new Image(); img.src = url;
+        try { await img.decode(); } catch { throw new Error('画像を読み込めませんでした。別の画像を選んでください。'); }
+        if (!img.naturalWidth || !img.naturalHeight) throw new Error('画像を読み込めませんでした。');
+        const canvas = document.createElement('canvas'); canvas.width = canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('画像を処理できませんでした。');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 512, 512);
+        const side = Math.min(img.naturalWidth, img.naturalHeight);
+        ctx.drawImage(img, (img.naturalWidth-side)/2, (img.naturalHeight-side)/2, side, side, 0, 0, 512, 512);
+        const result = canvas.toDataURL('image/jpeg', .86);
+        if (!validImage(result)) throw new Error('画像を保存できるサイズまで縮小できませんでした。');
+        return result;
+    } finally { URL.revokeObjectURL(url); }
+}
+exports.AvatarEditor = function AvatarEditor({ avatar, onChange, onError }) {
+    const [loading, setLoading] = React.useState(false);
+    const request = React.useRef(0);
+    React.useEffect(() => () => { request.current++; }, []);
+    const selectImage = async event => {
+        const file = event.target.files?.[0]; event.target.value = '';
+        if (!file) return;
+        const id = ++request.current; setLoading(true);
+        try { const data = await prepareAvatar(file); if (id === request.current) onChange(data); }
+        catch(error) { if (id === request.current) onError(error instanceof Error ? error.message : '画像を読み込めませんでした。'); }
+        finally { if (id === request.current) setLoading(false); }
+    };
+    return React.createElement('section', { className:'avatar-editor', 'aria-labelledby':'avatar-label', 'aria-busy':loading },
+        React.createElement('h2', { id:'avatar-label' }, 'アイコン'),
+        React.createElement('div', { className:'avatar-controls' },
+            avatar && React.createElement('img', { src:avatar, alt:'選択中のアイコン', width:48, height:48 }),
+            React.createElement('div', { className:'avatar-actions' },
+                React.createElement('label', { className:'avatar-file-label', htmlFor:'avatar-file' }, loading ? '画像を処理中…' : avatar ? '画像を変更' : '画像を選ぶ'),
+                React.createElement('input', { id:'avatar-file', className:'avatar-file', type:'file', accept:'image/png,image/jpeg,image/webp', disabled:loading, onChange:selectImage, 'aria-describedby':'avatar-help' }),
+                avatar && React.createElement('button', { type:'button', className:'avatar-remove', disabled:loading, onClick:()=>onChange('') }, '画像を削除'))),
+        React.createElement('p', { id:'avatar-help', className:'avatar-help' }, '画像の中央を丸く切り抜き、吹き出しに表示します。'));
+};
+exports.ThoughtBubble = function ThoughtBubble({ avatar, layout, prefix }) {
+    if (!avatar) return null;
+    const center = layout === 'center';
+    const x = center ? 326 : layout === 'right' ? 94 : 642;
+    const y = center ? 12 : 56;
+    const size = center ? 112 : 174;
+    const radius = size/2;
+    const dots = center ? [[443,100,7],[452,113,4]] : [[x+118,236,9],[x+125,252,5]];
+    const clip = `${prefix}-avatar-clip`;
+    return React.createElement('g', { 'data-avatar-bubble':'true' },
+        React.createElement('defs', null, React.createElement('clipPath', { id:clip }, React.createElement('circle', { cx:x+radius, cy:y+radius, r:radius-9 }))),
+        dots.map(([cx,cy,r],i)=>React.createElement('circle', { key:i,cx,cy,r,fill:'#fff',stroke:'#c9ceca',strokeWidth:1.8 })),
+        React.createElement('circle', { cx:x+radius,cy:y+radius,r:radius,fill:'#fff',stroke:'#c9ceca',strokeWidth:2 }),
+        React.createElement('image', { href:avatar,x:x+9,y:y+9,width:size-18,height:size-18,preserveAspectRatio:'xMidYMid slice',clipPath:`url(#${clip})` }));
+};
 },
 "src/components/icons.tsx":function(module,exports,require){
 "use strict";
